@@ -202,6 +202,23 @@ header{
 .card code{background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:12px}
 .card input{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);margin-bottom:10px}
 .card button{width:100%;padding:12px;border-radius:10px;background:var(--lotto);color:#fff;font-weight:700}
+/* ---------- 종료 확인 ---------- */
+#exitAsk{
+  position:fixed;inset:0;z-index:40;background:rgba(10,14,20,.55);
+  display:none;align-items:center;justify-content:center;padding:26px;
+  -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)
+}
+#exitAsk.show{display:flex}
+#exitAsk .box{
+  width:100%;max-width:320px;background:var(--panel);border:1px solid var(--line);
+  border-radius:16px;padding:20px 20px 16px;box-shadow:0 18px 48px rgba(10,14,20,.35)
+}
+#exitAsk h3{margin:0 0 7px;font-size:16.5px;letter-spacing:-.02em}
+#exitAsk p{margin:0 0 17px;font-size:13px;color:var(--tx-2);line-height:1.6}
+#exitAsk .row{display:flex;gap:8px}
+#exitAsk .row button{flex:1;padding:11px 0;border-radius:11px;font-size:14px;font-weight:700}
+#exitStay{background:var(--panel-2);border:1px solid var(--line);color:var(--tx)}
+#exitGo{background:var(--lotto);color:#fff}
 #toast{
   position:fixed;left:50%;bottom:calc(var(--sheet-h) + 22px);transform:translateX(-50%) translateY(8px);
   background:rgba(20,24,32,.92);color:#fff;padding:9px 15px;border-radius:999px;font-size:13px;
@@ -278,6 +295,17 @@ header{
     </ol>
     <input id="keyin" placeholder="JavaScript 키 붙여넣기" autocomplete="off">
     <button id="keysave">저장하고 시작</button>
+  </div>
+</div>
+
+<div id="exitAsk" role="dialog" aria-modal="true" aria-labelledby="exitTitle">
+  <div class="box">
+    <h3 id="exitTitle">앱을 종료할까요?</h3>
+    <p id="exitMsg">뒤로가기를 한 번 더 누르면 종료됩니다.<br>계속 보시려면 ‘계속 보기’를 눌러 주세요.</p>
+    <div class="row">
+      <button id="exitStay">계속 보기</button>
+      <button id="exitGo">종료</button>
+    </div>
   </div>
 </div>
 
@@ -715,6 +743,69 @@ function select(p,fromMarker){
 document.getElementById("dclose").addEventListener("click",function(){
   document.getElementById("detail").classList.remove("show");
 });
+
+/* ====== 안드로이드 뒤로가기 ======
+   열린 것이 있으면 먼저 닫고, 없을 때만 종료 확인창을 띄운다. */
+var backGuard = (function(){
+  var ask=document.getElementById("exitAsk");
+  var msg=document.getElementById("exitMsg");
+  var MSG0="뒤로가기를 한 번 더 누르면 종료됩니다.<br>계속 보시려면 ‘계속 보기’를 눌러 주세요.";
+  var leaving=false, armed=false;
+
+  function asking(){ return ask.classList.contains("show"); }
+  function openAsk(){ msg.innerHTML=MSG0; ask.classList.add("show"); }
+  function closeAsk(){ ask.classList.remove("show"); }
+
+  // 뒤로가기로 닫을 것이 있으면 닫고 true 를 돌려준다 (위에 있는 것부터)
+  function closeTop(){
+    if(asking()){ closeAsk(); return true; }
+    if(document.getElementById("setup").classList.contains("show")) return false;
+    var d=document.getElementById("detail");
+    if(d.classList.contains("show")){ d.classList.remove("show"); return true; }
+    if(sheet.dataset.state==="full"){ setSheet("half"); return true; }
+    if(qEl.value){
+      qEl.value=""; state.q=""; qClear.style.display="none";
+      try{ qEl.blur(); }catch(e){}
+      refresh(); return true;
+    }
+    return false;
+  }
+
+  // 뒤로가기 한 번을 흡수할 히스토리 한 칸
+  function arm(){
+    if(armed) return;
+    try{ history.pushState({nb4:1},""); armed=true; }catch(e){}
+  }
+
+  try{ history.replaceState({nb4:0},""); }catch(e){}
+  arm();
+
+  window.addEventListener("popstate",function(){
+    armed=false;
+    if(leaving) return;
+    if(closeTop()){ arm(); return; }
+    openAsk();        // 더 닫을 것이 없을 때만 확인창
+    // 여기서는 일부러 arm() 하지 않는다 -> 뒤로가기를 한 번 더 누르면 실제로 나간다
+  });
+
+  document.getElementById("exitStay").addEventListener("click",function(){
+    closeAsk(); arm();
+  });
+  ask.addEventListener("click",function(e){ if(e.target===ask){ closeAsk(); arm(); } });
+
+  document.getElementById("exitGo").addEventListener("click",function(){
+    leaving=true;
+    try{ window.close(); }catch(e){}
+    try{ history.back(); }catch(e){}
+    setTimeout(function(){
+      // 브라우저가 스스로 창을 닫지 못하는 경우 (일반 탭 등)
+      leaving=false;
+      msg.innerHTML="브라우저가 창을 직접 닫지 못합니다.<br>뒤로가기를 한 번 더 누르면 나갑니다.";
+    },600);
+  });
+
+  return {arm:arm, closeTop:closeTop};
+})();
 
 /* ====== 부팅 ====== */
 function boot(key){
